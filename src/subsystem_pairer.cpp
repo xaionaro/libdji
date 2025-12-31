@@ -14,7 +14,8 @@ void SubsystemPairer::pair() {
     if (m_state != State::Idle)
         return;
 
-    emit log("Starting pairing process...");
+    emit log("[DJI-BLE] "
+             "Starting pairing process...");
     m_state = State::WaitingForStatus;
 
     sendRequestStartPairing();
@@ -23,13 +24,14 @@ void SubsystemPairer::pair() {
 }
 
 void SubsystemPairer::connectToWiFi(const QString &ssid, const QString &psk) {
-    emit log(QString("Connecting to WiFi SSID: %1").arg(ssid));
+    emit log("[DJI-BLE] " + QString("Connecting to WiFi SSID: %1").arg(ssid));
 
     sendMessageConnectToWiFi(ssid, psk);
 }
 
 void SubsystemPairer::startScanningWiFi() {
-    emit log("Starting WiFi scan...");
+    emit log("[DJI-BLE] "
+             "Starting WiFi scan...");
     sendMessageStartScanningWiFi();
 }
 
@@ -37,12 +39,14 @@ void SubsystemPairer::handleMessage(const Message &msg) {
     if (msg.msgType == MessageType::PairingStatus) {
 
         if (msg.payload.size() >= 2 && static_cast<uint8_t>(msg.payload[1]) == 0x01) {
-            emit log("Device is already paired.");
+            emit log("[DJI-BLE] "
+                     "Device is already paired.");
             m_state = State::Idle;
             emit pairingComplete();
         }
     } else if (msg.msgType == MessageType::PairingPINApproved) {
-        emit log("PIN approved. Finalizing pairing...");
+        emit log("[DJI-BLE] "
+                 "PIN approved. Finalizing pairing...");
 
         sendMessagePairingStage1();
         sendMessagePairingStage2();
@@ -51,15 +55,18 @@ void SubsystemPairer::handleMessage(const Message &msg) {
         emit pairingComplete();
     } else if (msg.msgType == MessageType::ConnectToWiFiResult) {
         if (msg.payload.size() >= 2 && msg.payload[0] == 0x00 && msg.payload[1] == 0x00) {
-            emit log("WiFi connected successfully.");
+            emit log("[DJI-BLE] "
+                     "WiFi connected successfully.");
             emit wifiConnected();
         } else {
             QString err =
+                "[DJI-BLE] " +
                 QString("WiFi connection failed. Payload: %1").arg(QString(msg.payload.toHex()));
             emit error(err);
         }
     } else if (msg.msgType == MessageType::WiFiScanReport) {
-        emit log("Received WiFi scan report.");
+        emit log("[DJI-BLE] "
+                 "Received WiFi scan report.");
         emit wifiScanReport(msg.payload);
     }
 }

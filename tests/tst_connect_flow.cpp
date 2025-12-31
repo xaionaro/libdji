@@ -1,6 +1,11 @@
+/**
+ * @file tst_connect_flow.cpp
+ * @brief Unit tests for the DJI connection flow using a MockDevice.
+ */
+
 #include "tst_connect_flow.h"
-#include "connect_flow_runner.h"
 #include "dji/device.h"
+#include "dji/device_manager.h"
 #include "dji/message.h"
 #include "dji/subsystem_configurer.h"
 #include "dji/subsystem_pairer.h"
@@ -23,12 +28,30 @@ public:
 
         qDebug().noquote() << "SENT_HEX:" << msg.serialize().toHex().toUpper();
         emit messageSent(msg);
-        handleSentMessage(msg);
+
+        // Always respond asynchronously to avoid recursion issues
+        QTimer::singleShot(10, [this, msg]() { handleSentMessage(msg); });
     }
 
     void sendRawPairing(const QByteArray &data) override {
         qDebug().noquote() << "SENT_HEX:" << data.toHex().toUpper();
         emit rawPairingSent(data);
+
+        // Simulate pairing status response
+        QTimer::singleShot(10, [this]() {
+            dji::Message resp;
+            resp.subsystem = dji::SubsystemID::Status;
+            resp.msgType = dji::MessageType::MaybeStatus;
+            resp.payload = QByteArray(100, 0);
+            simulateIncomingMessage(resp);
+        });
+    }
+
+    bool isConnected() const override {
+        return true;
+    }
+    bool isInitialized() const override {
+        return true;
     }
 
     void simulateIncomingMessage(const dji::Message &msg) {
@@ -70,20 +93,28 @@ private:
             shouldRespond = true;
 
         } else if (msg.msgType == dji::MessageType::StartStopStreaming ||
-                   msg.msgType == dji::MessageType::Configure) {
+                   msg.msgType == dji::MessageType::Configure ||
+                   msg.msgType == dji::MessageType::ConfigureStreaming) {
             resp.msgType = msg.msgType;
             resp.payload = QByteArray::fromHex("00");
 
             if (msg.subsystem == dji::SubsystemID::Streamer) {
-                resp.msgType = dji::MessageType::StartStopStreamingResult;
+                if (msg.msgType == dji::MessageType::ConfigureStreaming) {
+                    // ConfigureStreaming doesn't seem to have a specific result type in constants.h
+                    // but let's assume it returns success
+                    resp.msgType = dji::MessageType::StartStopStreamingResult;
+                } else {
+                    resp.msgType = dji::MessageType::StartStopStreamingResult;
+                }
             }
             shouldRespond = true;
 
-            qDebug() << "StartStopStreaming payload hex:" << msg.payload.toHex();
+            qDebug() << "StartStopStreaming/Configure payload hex:" << msg.payload.toHex();
 
-            if (msg.subsystem == dji::SubsystemID::Streamer && msg.payload.size() > 4 &&
-                static_cast<unsigned char>(msg.payload.at(0)) == 0x01) {
-                qDebug() << "Condition met, sending StreamingStatus. Payload size:"
+            if (msg.subsystem == dji::SubsystemID::Streamer && msg.payload.size() >= 1 &&
+                static_cast<unsigned char>(msg.payload.at(0)) == 0x01 &&
+                msg.msgType == dji::MessageType::StartStopStreaming) {
+                qDebug() << "Condition met, will send StreamingStatus later. Payload size:"
                          << msg.payload.size()
                          << "First byte:" << static_cast<int>(msg.payload.at(0));
 
@@ -93,26 +124,12 @@ private:
                 status.payload = QByteArray(21, 0);
                 status.payload[20] = 100;
 
-                QMetaObject::invokeMethod(
-                    this, [this, status]() { simulateIncomingMessage(status); },
-                    Qt::QueuedConnection);
+                QTimer::singleShot(50, [this, status]() { simulateIncomingMessage(status); });
             }
         }
 
         if (shouldRespond) {
-
             simulateIncomingMessage(resp);
-            if (resp.msgType == dji::MessageType::StartStopStreamingResult &&
-                msg.subsystem == dji::SubsystemID::Streamer && msg.payload.size() > 4 &&
-                static_cast<unsigned char>(msg.payload.at(0)) == 0x01) {
-
-                dji::Message status;
-                status.subsystem = dji::SubsystemID::Status;
-                status.msgType = dji::MessageType::StreamingStatus;
-                status.payload = QByteArray(21, 0);
-                status.payload[20] = 100;
-                simulateIncomingMessage(status);
-            }
         }
     }
 };
@@ -128,15 +145,27 @@ void TestConnectWifiAndStreaming::testFullFlow() {
     initStatus.payload = QByteArray(100, 0);
     device.simulateIncomingMessage(initStatus);
 
-    connect_flow::Options opts;
+    dji::DeviceManager manager(&device);
+    QSignalSpy spyFinished(&manager, &dji::DeviceManager::finished);
+
+    dji::ConnectionOptions opts;
     opts.ssid = "test-ssid";
     opts.psk = "test-psk";
     opts.rtmpUrl = "rtmp://test/live";
-    opts.stepTimeoutMs = 2000;
-    opts.initiateConnection = false;
 
-    QString error;
-    bool ok = connect_flow::runConnectWiFiAndStartStreaming(&device, opts, &error);
+    manager.connectToWiFiAndStartStreaming(&device, opts);
+
+    // Wait for finished signal or timeout
+    QVERIFY(spyFinished.wait(5000));
+
+    bool ok = spyFinished.at(0).at(1).toBool();
+
+    if (ok) {
+        // Wait a bit for the StreamingStatus message to arrive
+        QEventLoop waitLoop;
+        QTimer::singleShot(200, &waitLoop, &QEventLoop::quit);
+        waitLoop.exec();
+    }
 
     bool streamingStatusReceived = false;
     for (int i = 0; i < spyReceiver.count(); ++i) {
@@ -148,8 +177,7 @@ void TestConnectWifiAndStreaming::testFullFlow() {
         }
     }
 
-    QVERIFY2(ok && streamingStatusReceived,
-             QString("Flow failed: %1").arg(error).toUtf8().constData());
+    QVERIFY2(ok && streamingStatusReceived, "Flow failed or StreamingStatus not received");
 }
 
 #include "tst_connect_flow.moc"

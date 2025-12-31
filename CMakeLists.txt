@@ -13,12 +13,16 @@ qt_add_library(dji STATIC
     include/dji/subsystem_pairer.h
     include/dji/subsystem_streamer.h
     include/dji/subsystem_configurer.h
+    include/dji/device_manager.h
+    include/dji/device_flow.h
     include/dji/crc.h
     src/message.cpp
     src/device.cpp
     src/subsystem_pairer.cpp
     src/subsystem_streamer.cpp
     src/subsystem_configurer.cpp
+    src/device_manager.cpp
+    src/device_flow.cpp
     src/crc.cpp
 )
 

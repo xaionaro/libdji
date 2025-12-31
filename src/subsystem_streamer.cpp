@@ -10,7 +10,8 @@ SubsystemStreamer::SubsystemStreamer(Device *device) : m_device(device) {
 }
 
 void SubsystemStreamer::prepareToLiveStream() {
-    emit log("Preparing to live stream (Stage 1)...");
+    emit log("[DJI-BLE] "
+             "Preparing to live stream (Stage 1)...");
     m_state = State::PreparingStage1;
 
     sendMessagePrepareToLiveStreamStage1();
@@ -18,7 +19,7 @@ void SubsystemStreamer::prepareToLiveStream() {
 
 void SubsystemStreamer::startLiveStream(Resolution resolution, uint16_t bitrateKbps, FPS fps,
                                         const QString &rtmpURL) {
-    emit log(QString("Starting live stream to %1").arg(rtmpURL));
+    emit log("[DJI-BLE] " + QString("Starting live stream to %1").arg(rtmpURL));
     m_pendingResolution = resolution;
     m_pendingBitrate = bitrateKbps;
     m_pendingFps = fps;
@@ -31,7 +32,8 @@ void SubsystemStreamer::startLiveStream(Resolution resolution, uint16_t bitrateK
 }
 
 void SubsystemStreamer::stopLiveStream() {
-    emit log("Stopping live stream...");
+    emit log("[DJI-BLE] "
+             "Stopping live stream...");
     m_state = State::Stopping;
     sendMessageStopLiveStream();
 }
@@ -41,30 +43,34 @@ void SubsystemStreamer::handleMessage(const Message &msg) {
         if (m_state == State::PreparingStage1) {
 
             if (msg.payload.size() == 1 && static_cast<uint8_t>(msg.payload[0]) == 0x00) {
-                emit log("PrepareToLiveStream Stage 1 success. Sending Stage 2...");
+                emit log("[DJI-BLE] "
+                         "PrepareToLiveStream Stage 1 success. Sending Stage 2...");
                 m_state = State::PreparingStage2;
                 sendMessagePrepareToLiveStreamStage2();
             } else {
-                emit error(QString("PrepareToLiveStream Stage 1 failed. Payload: %1")
-                               .arg(QString(msg.payload.toHex())));
+                emit error("[DJI-BLE] " + QString("PrepareToLiveStream Stage 1 failed. Payload: %1")
+                                              .arg(QString(msg.payload.toHex())));
             }
         }
     } else if (msg.msgType == MessageType::StartStopStreamingResult) {
 
         if (m_state == State::PreparingStage2) {
-            emit log("PrepareToLiveStream Stage 2 success.");
+            emit log("[DJI-BLE] "
+                     "PrepareToLiveStream Stage 2 success.");
             m_state = State::Idle;
             emit prepareToLiveStreamComplete();
         } else if (m_state == State::Starting) {
 
             if (msg.msgId == MessageID::StartStreaming) {
-                emit log("StartLiveStream success.");
+                emit log("[DJI-BLE] "
+                         "StartLiveStream success.");
                 m_state = State::Idle;
                 emit startLiveStreamComplete();
             }
         } else if (m_state == State::Stopping) {
 
-            emit log("StopLiveStream success.");
+            emit log("[DJI-BLE] "
+                     "StopLiveStream success.");
             m_state = State::Idle;
             emit stopLiveStreamComplete();
         }

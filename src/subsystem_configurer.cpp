@@ -8,13 +8,14 @@ SubsystemConfigurer::SubsystemConfigurer(Device *device) : m_device(device) {
 }
 
 void SubsystemConfigurer::setImageStabilization(ImageStabilization v) {
-    emit log(QString("Setting image stabilization to %1").arg(static_cast<int>(v)));
+    emit log("[DJI-BLE] " + QString("Setting image stabilization to %1").arg(static_cast<int>(v)));
     sendMessageSetImageStabilization(v);
 }
 
 void SubsystemConfigurer::handleMessage(const Message &msg) {
     if (msg.subsystem == SubsystemID::Configurer && msg.msgType == MessageType::Configure) {
-        emit log(QString("Received configurer result: %1").arg(QString(msg.payload.toHex())));
+        emit log("[DJI-BLE] " +
+                 QString("Received configurer result: %1").arg(QString(msg.payload.toHex())));
     }
 }
 

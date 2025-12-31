@@ -1,8 +1,6 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
 set(SHARED_FLOW_SOURCES
-    connect_flow_runner.h
-    connect_flow_runner.cpp
 )
 
 add_executable(dji_tests

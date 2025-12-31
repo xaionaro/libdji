@@ -5,97 +5,58 @@
 #include <QDebug>
 #include <QTimer>
 
-#include "connect_flow_runner.h"
 #include "dji/constants.h"
 #include "dji/device.h"
+#include "dji/device_manager.h"
 
 class DemoController : public QObject {
     Q_OBJECT
 public:
-    DemoController(connect_flow::Options flowOpts, const QString &deviceAddrFilter,
-                   int scanTimeoutMs, QObject *parent = nullptr)
-        : QObject(parent), m_flowOptions(std::move(flowOpts)), m_deviceAddrFilter(deviceAddrFilter),
+    DemoController(dji::ConnectionOptions opts, int scanTimeoutMs, QObject *parent = nullptr)
+        : QObject(parent), m_options(std::move(opts)),
           m_scanTimeout(scanTimeoutMs > 0 ? scanTimeoutMs : 30000) {
-        m_agent = new QBluetoothDeviceDiscoveryAgent(this);
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered, this,
-                &DemoController::onDeviceDiscovered);
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::finished, this,
-                &DemoController::onScanFinished);
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::errorOccurred, this,
-                &DemoController::onScanError);
+        m_manager = new dji::DeviceManager(nullptr, this);
+        connect(m_manager, &dji::DeviceManager::log, this, &DemoController::onLog);
+        connect(m_manager, &dji::DeviceManager::error, this, &DemoController::onError);
+        connect(m_manager, &dji::DeviceManager::finished, this, &DemoController::onFinished);
+        connect(m_manager, &dji::DeviceManager::deviceChanged, this, [this]() {
+            if (m_manager->device() && !m_started) {
+                m_started = true;
+                m_manager->connectToWiFiAndStartStreaming(m_manager->device(), m_options);
+            }
+        });
     }
 
     void start() {
-        qInfo() << "Starting BLE scan...";
-        m_agent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
+        qInfo() << "Starting discovery...";
+        m_manager->startDiscovery(m_options);
         QTimer::singleShot(m_scanTimeout, this, [this]() {
-            if (!m_device) {
-                fail("Scan timed out without matching device");
+            if (!m_manager->device()) {
+                fail("Discovery timed out without matching device");
             }
         });
     }
 
 private slots:
-    void onDeviceDiscovered(const QBluetoothDeviceInfo &info) {
-        qInfo() << "Discovered device" << info.name() << info.address().toString();
-        auto manufacturerData = info.manufacturerData();
-        qDebug() << "Manufacturer data keys:" << manufacturerData.keys();
-        for (auto key : manufacturerData.keys()) {
-            qDebug() << "Manufacturer data for" << QString("0x%1").arg(key, 4, 16, QChar('0'))
-                     << ":" << manufacturerData.value(key).toHex();
-        }
-        dji::DeviceType deviceType = dji::identifyDeviceType(info.manufacturerData().value(0x08AA));
-        if (deviceType == dji::DeviceType::Undefined) {
-            return;
-        }
-        if (!m_deviceAddrFilter.isEmpty() &&
-            !info.address().toString().contains(m_deviceAddrFilter, Qt::CaseInsensitive)) {
-            qInfo() << "Skipping device" << info.address().toString()
-                    << "because address does not match filter" << m_deviceAddrFilter;
-            return;
-        }
-        qInfo() << "Matched DJI device" << info.name() << info.address().toString()
-                << "type:" << static_cast<int>(deviceType);
-        m_agent->stop();
-        createDevice(info, deviceType);
-    }
-
-    void onScanFinished() {
-        if (!m_device) {
-            fail("Scan finished without matching device");
-        }
-    }
-
-    void onScanError(QBluetoothDeviceDiscoveryAgent::Error error) {
-        Q_UNUSED(error);
-        fail(QStringLiteral("Scan error: %1").arg(m_agent->errorString()));
-    }
-
-    void onDeviceLog(const QString &message) {
+    void onLog(const QString &message) {
         qInfo().noquote() << message;
     }
 
-    void onDeviceError(const QString &message) {
-        fail(QStringLiteral("Device error: %1").arg(message));
+    void onError(const QString &message) {
+        fail(message);
+    }
+
+    void onFinished(dji::Device *dev, bool success) {
+        Q_UNUSED(dev);
+        if (success) {
+            qInfo() << "Flow completed successfully";
+            QCoreApplication::quit();
+        } else {
+            fail("Flow failed");
+        }
     }
 
 private:
-    void createDevice(const QBluetoothDeviceInfo &info, dji::DeviceType type) {
-        if (m_device)
-            return;
-        m_device = new dji::Device(info, type, this);
-        connect(m_device, &dji::Device::log, this, &DemoController::onDeviceLog);
-        connect(m_device, &dji::Device::errorOccurred, this, &DemoController::onDeviceError);
-
-        QString error;
-        if (!connect_flow::runConnectWiFiAndStartStreaming(m_device, m_flowOptions, &error)) {
-            fail(error.isEmpty() ? QStringLiteral("Flow failed") : error);
-            return;
-        }
-        qInfo() << "Flow completed successfully";
-        QCoreApplication::quit();
-    }
-
     void fail(const QString &message) {
         if (m_failed)
             return;
@@ -104,12 +65,11 @@ private:
         QCoreApplication::exit(1);
     }
 
-    QBluetoothDeviceDiscoveryAgent *m_agent = nullptr;
-    dji::Device *m_device = nullptr;
-    connect_flow::Options m_flowOptions;
-    QString m_deviceAddrFilter;
+    dji::DeviceManager *m_manager = nullptr;
+    dji::ConnectionOptions m_options;
     int m_scanTimeout = 30000;
     bool m_failed = false;
+    bool m_started = false;
 };
 
 int main(int argc, char **argv) {
@@ -126,12 +86,15 @@ int main(int argc, char **argv) {
     QCommandLineOption rtmpOpt("rtmp-url", "RTMP URL", "url");
     QCommandLineOption filterAddrOpt("filter-device-addr", "Filter by device address substring",
                                      "addr");
+    QCommandLineOption filterNameOpt("filter-device-name", "Filter by device name substring",
+                                     "name");
     QCommandLineOption scanTimeoutOpt("scan-timeout", "Scan timeout seconds", "seconds", "30");
 
     parser.addOption(ssidOpt);
     parser.addOption(pskOpt);
     parser.addOption(rtmpOpt);
     parser.addOption(filterAddrOpt);
+    parser.addOption(filterNameOpt);
     parser.addOption(scanTimeoutOpt);
 
     parser.process(app);
@@ -140,16 +103,17 @@ int main(int argc, char **argv) {
         parser.showHelp(1);
     }
 
-    connect_flow::Options opts;
+    dji::ConnectionOptions opts;
     opts.ssid = parser.value(ssidOpt);
     opts.psk = parser.value(pskOpt);
     opts.rtmpUrl = parser.value(rtmpOpt);
-    opts.initiateConnection = true;
+    opts.deviceAddrFilter = parser.value(filterAddrOpt);
+    opts.deviceNameFilter = parser.value(filterNameOpt);
 
     bool ok = false;
     int scanTimeout = parser.value(scanTimeoutOpt).toInt(&ok);
 
-    DemoController controller(opts, parser.value(filterAddrOpt), ok ? scanTimeout * 1000 : 30000);
+    DemoController controller(opts, ok ? scanTimeout * 1000 : 30000);
     controller.start();
 
     return app.exec();

@@ -1,3 +1,8 @@
+/**
+ * @file device.h
+ * @brief Base class for DJI devices, providing BLE communication and subsystem access.
+ */
+
 #ifndef DJI_DEVICE_H
 #define DJI_DEVICE_H
 
@@ -16,11 +21,12 @@ class SubsystemConfigurer;
 class Device : public QObject {
     Q_OBJECT
 public:
+    explicit Device(QObject *parent = nullptr);
     explicit Device(const QBluetoothDeviceInfo &info, DeviceType type, QObject *parent = nullptr);
     ~Device() override;
 
-    void connectToDevice();
-    void disconnectFromDevice();
+    virtual void connectToDevice();
+    virtual void disconnectFromDevice();
 
     virtual void sendMessage(const Message &msg, bool noResponse = true);
     virtual void sendRawPairing(const QByteArray &data);
@@ -32,8 +38,12 @@ public:
         m_deviceType = t;
     }
 
-    bool isConnected() const;
-    bool isInitialized() const;
+    QBluetoothDeviceInfo deviceInfo() const {
+        return m_deviceInfo;
+    }
+
+    virtual bool isConnected() const;
+    virtual bool isInitialized() const;
 
     SubsystemPairer *pairer() {
         return m_pairer;
@@ -48,6 +58,7 @@ public:
 signals:
     void connected();
     void disconnected();
+    void initialized();
     void errorOccurred(const QString &message);
     void log(const QString &message);
 
@@ -64,7 +75,7 @@ private slots:
     void onCharacteristicWriteFinished(const QLowEnergyCharacteristic &c, const QByteArray &value);
     void onCharacteristicReadFinished(const QLowEnergyCharacteristic &c, const QByteArray &value);
 
-private:
+protected:
     void discoverCharacteristics();
     void receiveNotification(const QByteArray &data);
 

@@ -2,6 +2,7 @@
 #define DJI_CONSTANTS_H
 
 #include <QByteArray>
+#include <QString>
 #include <cstdint>
 
 namespace dji {
@@ -90,7 +91,6 @@ inline uint8_t deviceTypeToStabilizationByte(DeviceType t) {
 }
 
 inline DeviceType identifyDeviceType(const QByteArray &manufacturerData) {
-
     if (manufacturerData.size() < 2)
         return DeviceType::Undefined;
 
