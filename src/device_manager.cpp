@@ -82,8 +82,8 @@ void DeviceManager::addDevice(Device *device) {
     emit devicesChanged();
 }
 
-void DeviceManager::startDiscovery(const ConnectionOptions &options) {
-    m_options = options;
+void DeviceManager::startDiscovery(const DiscoveryOptions &options) {
+    m_discoveryOptions = options;
     if (!m_discoveryAgent) {
         m_discoveryAgent = new QBluetoothDeviceDiscoveryAgent(this);
         connect(m_discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered, this,
@@ -125,8 +125,8 @@ void DeviceManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info) {
 
     DeviceType deviceType = identifyDeviceType(manufacturerData.value(0x08AA));
 
-    if (deviceType == DeviceType::Undefined && !m_options.deviceNameFilter.isEmpty()) {
-        if (info.name().contains(m_options.deviceNameFilter, Qt::CaseInsensitive)) {
+    if (deviceType == DeviceType::Undefined && !m_discoveryOptions.deviceNameFilter.isEmpty()) {
+        if (info.name().contains(m_discoveryOptions.deviceNameFilter, Qt::CaseInsensitive)) {
             deviceType = DeviceType::Unknown;
         }
     }
@@ -135,8 +135,8 @@ void DeviceManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info) {
         return;
     }
 
-    if (!m_options.deviceAddrFilter.isEmpty() &&
-        !info.address().toString().contains(m_options.deviceAddrFilter, Qt::CaseInsensitive)) {
+    if (!m_discoveryOptions.deviceAddrFilter.isEmpty() &&
+        !info.address().toString().contains(m_discoveryOptions.deviceAddrFilter, Qt::CaseInsensitive)) {
         return;
     }
 
@@ -144,8 +144,12 @@ void DeviceManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info) {
                  .arg(info.name(), info.address().toString())
                  .arg(static_cast<int>(deviceType)));
 
-    Device *dev = new Device(info, deviceType, this);
+    Device *dev = createDevice(info, deviceType);
     addDevice(dev);
+}
+
+Device *DeviceManager::createDevice(const QBluetoothDeviceInfo &info, DeviceType type) {
+    return new Device(info, type, this);
 }
 
 void DeviceManager::onScanFinished() {
@@ -156,7 +160,7 @@ void DeviceManager::onScanError() {
     onError(nullptr, QString("Discovery error: %1").arg(m_discoveryAgent->errorString()));
 }
 
-void DeviceManager::connectToWiFiAndStartStreaming(Device *dev, const ConnectionOptions &options) {
+void DeviceManager::connectToWiFiAndStartStreaming(Device *dev, const StreamingOptions &options) {
     runFlow(dev, new StreamingStarter(options, this));
 }
 

@@ -20,6 +20,12 @@ class SubsystemConfigurer;
 
 class Device : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QString name READ name NOTIFY nameChanged)
+    Q_PROPERTY(QString address READ address NOTIFY addressChanged)
+    Q_PROPERTY(DeviceType deviceType READ deviceType NOTIFY deviceTypeChanged)
+    Q_PROPERTY(bool isConnected READ isConnected NOTIFY connected)
+    Q_PROPERTY(bool isInitialized READ isInitialized NOTIFY initialized)
+
 public:
     explicit Device(QObject *parent = nullptr);
     explicit Device(const QBluetoothDeviceInfo &info, DeviceType type, QObject *parent = nullptr);
@@ -31,11 +37,21 @@ public:
     virtual void sendMessage(const Message &msg, bool noResponse = true);
     virtual void sendRawPairing(const QByteArray &data);
 
+    QString name() const {
+        return m_deviceInfo.name();
+    }
+    QString address() const {
+        return m_deviceInfo.address().toString();
+    }
+
     DeviceType deviceType() const {
         return m_deviceType;
     }
     void setDeviceType(DeviceType t) {
-        m_deviceType = t;
+        if (m_deviceType != t) {
+            m_deviceType = t;
+            emit deviceTypeChanged();
+        }
     }
 
     QBluetoothDeviceInfo deviceInfo() const {
@@ -63,6 +79,9 @@ signals:
     void log(const QString &message);
 
     void messageReceived(const Message &msg);
+    void nameChanged();
+    void addressChanged();
+    void deviceTypeChanged();
 
 private slots:
     void onControllerConnected();

@@ -12,7 +12,7 @@
 class DemoController : public QObject {
     Q_OBJECT
 public:
-    DemoController(dji::ConnectionOptions opts, int scanTimeoutMs, QObject *parent = nullptr)
+    DemoController(dji::StreamingOptions opts, int scanTimeoutMs, QObject *parent = nullptr)
         : QObject(parent), m_options(std::move(opts)),
           m_scanTimeout(scanTimeoutMs > 0 ? scanTimeoutMs : 30000) {
         m_manager = new dji::DeviceManager(nullptr, this);
@@ -27,9 +27,9 @@ public:
         });
     }
 
-    void start() {
+    void start(const dji::DiscoveryOptions &discOpts) {
         qInfo() << "Starting discovery...";
-        m_manager->startDiscovery(m_options);
+        m_manager->startDiscovery(discOpts);
         QTimer::singleShot(m_scanTimeout, this, [this]() {
             if (!m_manager->device()) {
                 fail("Discovery timed out without matching device");
@@ -66,7 +66,7 @@ private:
     }
 
     dji::DeviceManager *m_manager = nullptr;
-    dji::ConnectionOptions m_options;
+    dji::StreamingOptions m_options;
     int m_scanTimeout = 30000;
     bool m_failed = false;
     bool m_started = false;
@@ -103,18 +103,20 @@ int main(int argc, char **argv) {
         parser.showHelp(1);
     }
 
-    dji::ConnectionOptions opts;
+    dji::StreamingOptions opts;
     opts.ssid = parser.value(ssidOpt);
     opts.psk = parser.value(pskOpt);
     opts.rtmpUrl = parser.value(rtmpOpt);
-    opts.deviceAddrFilter = parser.value(filterAddrOpt);
-    opts.deviceNameFilter = parser.value(filterNameOpt);
+
+    dji::DiscoveryOptions discOpts;
+    discOpts.deviceAddrFilter = parser.value(filterAddrOpt);
+    discOpts.deviceNameFilter = parser.value(filterNameOpt);
 
     bool ok = false;
     int scanTimeout = parser.value(scanTimeoutOpt).toInt(&ok);
 
     DemoController controller(opts, ok ? scanTimeout * 1000 : 30000);
-    controller.start();
+    controller.start(discOpts);
 
     return app.exec();
 }

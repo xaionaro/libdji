@@ -31,7 +31,7 @@ signals:
 class StreamingStarter : public DeviceFlow {
     Q_OBJECT
 public:
-    explicit StreamingStarter(const ConnectionOptions &options, QObject *parent = nullptr);
+    explicit StreamingStarter(const StreamingOptions &options, QObject *parent = nullptr);
 
     void start(Device *dev) override;
     void stop() override;
@@ -46,7 +46,7 @@ private slots:
 
 private:
     Device *m_device = nullptr;
-    ConnectionOptions m_options;
+    StreamingOptions m_options;
 };
 
 } // namespace dji

@@ -21,15 +21,18 @@ namespace dji {
 class Device;
 class DeviceFlow;
 
-struct ConnectionOptions {
+struct DiscoveryOptions {
+    QString deviceAddrFilter;
+    QString deviceNameFilter;
+};
+
+struct StreamingOptions {
     QString ssid;
     QString psk;
     QString rtmpUrl;
     Resolution resolution = Resolution::Res1080p;
     uint16_t bitrateKbps = 4000;
     FPS fps = FPS::FPS25;
-    QString deviceAddrFilter;
-    QString deviceNameFilter;
 };
 
 class DeviceManager : public QObject {
@@ -38,9 +41,9 @@ public:
     explicit DeviceManager(Device *device = nullptr, QObject *parent = nullptr);
     ~DeviceManager();
 
-    void connectToWiFiAndStartStreaming(Device *dev, const ConnectionOptions &options);
+    void connectToWiFiAndStartStreaming(Device *dev, const StreamingOptions &options);
     void runFlow(Device *dev, DeviceFlow *flow);
-    void startDiscovery(const ConnectionOptions &options = ConnectionOptions());
+    void startDiscovery(const DiscoveryOptions &options = DiscoveryOptions());
     void stopDiscovery();
     void stop();
 
@@ -51,6 +54,9 @@ public:
     QList<Device *> devices() const {
         return m_devices;
     }
+
+protected:
+    virtual Device *createDevice(const QBluetoothDeviceInfo &info, DeviceType type);
 
 signals:
     void isPairedChanged(Device *device);
@@ -87,7 +93,7 @@ private:
     QList<Device *> m_devices;
     QMap<Device *, DeviceState> m_deviceStates;
     QBluetoothDeviceDiscoveryAgent *m_discoveryAgent = nullptr;
-    ConnectionOptions m_options;
+    DiscoveryOptions m_discoveryOptions;
 };
 
 } // namespace dji

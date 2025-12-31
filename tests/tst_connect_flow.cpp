@@ -148,7 +148,7 @@ void TestConnectWifiAndStreaming::testFullFlow() {
     dji::DeviceManager manager(&device);
     QSignalSpy spyFinished(&manager, &dji::DeviceManager::finished);
 
-    dji::ConnectionOptions opts;
+    dji::StreamingOptions opts;
     opts.ssid = "test-ssid";
     opts.psk = "test-psk";
     opts.rtmpUrl = "rtmp://test/live";

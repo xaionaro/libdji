@@ -5,7 +5,7 @@
 
 namespace dji {
 
-StreamingStarter::StreamingStarter(const ConnectionOptions &options, QObject *parent)
+StreamingStarter::StreamingStarter(const StreamingOptions &options, QObject *parent)
     : DeviceFlow(parent), m_options(options) {}
 
 void StreamingStarter::start(Device *dev) {
